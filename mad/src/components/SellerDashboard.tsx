@@ -6,7 +6,7 @@ import { Textarea } from './ui/textarea';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Plus, Clock, IndianRupee, Package, Eye, Edit, Trash2 } from 'lucide-react';
+import { Plus, Clock, IndianRupee, Package, Eye, Edit, Trash2, MessageSquare } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
@@ -17,6 +17,7 @@ import { API_ENDPOINTS } from '../config/api';
 
 interface SellerDashboardProps {
   onBack: () => void;
+  onChat?: (userId: string) => void;
 }
 
 interface Item {
@@ -32,9 +33,14 @@ interface Item {
   createdAt: string;
   currentBid?: number;
   auctionEndDate?: string;
+  highestBidderId?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
 }
 
-export function SellerDashboard({ onBack }: SellerDashboardProps) {
+export function SellerDashboard({ onBack, onChat }: SellerDashboardProps) {
   const [isAddingItem, setIsAddingItem] = React.useState(false);
   const [listingType, setListingType] = React.useState<'auction' | 'fixed'>('fixed');
   const [loading, setLoading] = React.useState(false);
@@ -456,28 +462,55 @@ export function SellerDashboard({ onBack }: SellerDashboardProps) {
           </TabsContent>
 
           <TabsContent value="bids" className="space-y-3 mt-4">
-            {auctionItems.map((item) => (
-              <Card key={item._id} className="p-4">
-                <div className="flex gap-3">
-                  {item.images.length > 0 && (
-                    <img
-                      src={item.images[0].data}
-                      alt={item.title}
-                      className="w-20 h-20 object-cover rounded"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm line-clamp-1">{item.title}</p>
-                    <p className="text-sm text-amber-700 mt-1">
-                      Current: {formatPrice(item.currentBid || 0)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Ends: {new Date(item.auctionEndDate || '').toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
+            {auctionItems.length === 0 ? (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground text-sm">No active auctions</p>
               </Card>
-            ))}
+            ) : (
+              auctionItems.map((item) => (
+                <Card key={item._id} className="p-4">
+                  <div className="flex gap-3">
+                    {item.images.length > 0 && (
+                      <img
+                        src={item.images[0].data}
+                        alt={item.title}
+                        className="w-20 h-20 object-cover rounded"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm line-clamp-1">{item.title}</p>
+                      <p className="text-sm text-amber-700 mt-1">
+                        Current: {formatPrice(item.currentBid || 0)}
+                      </p>
+                      {item.highestBidderId ? (
+                        <div className="flex items-center justify-between mt-2">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Highest Bidder:</p>
+                            <p className="text-xs font-medium">{item.highestBidderId.name}</p>
+                          </div>
+                          {onChat && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => onChat(item.highestBidderId!._id)}
+                            >
+                              <MessageSquare className="size-3 mr-1" />
+                              Chat
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-2">No bids yet</p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Ends: {new Date(item.auctionEndDate || '').toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))
+            )}
           </TabsContent>
 
           <TabsContent value="sold" className="space-y-3 mt-4">

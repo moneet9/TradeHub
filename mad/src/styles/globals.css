@@ -183,3 +183,10 @@
 html {
   font-size: var(--font-size);
 }
+[data-sonner-toast] {
+  color: var(--color-foreground) !important;
+}
+
+[data-sonner-toast] [data-description] {
+  color: var(--color-muted-foreground) !important;
+}

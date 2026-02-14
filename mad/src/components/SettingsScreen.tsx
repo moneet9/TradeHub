@@ -25,6 +25,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { API_ENDPOINTS } from '../config/api';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -53,7 +54,12 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = React.useState<string>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-
+  const [isChangeEmailDialogOpen, setIsChangeEmailDialogOpen] = React.useState(false);
+  const [isChangePasswordDialogOpen, setIsChangePasswordDialogOpen] = React.useState(false);
+  const [newEmail, setNewEmail] = React.useState('');
+  const [newPassword, setNewPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  
   React.useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
@@ -100,6 +106,88 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
+    }
+  };
+
+  const handleChangeEmail = async () => {
+    if (!newEmail) {
+      toast.error('Please enter a new email');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Missing auth token');
+      }
+
+      const res = await fetch(API_ENDPOINTS.CHANGE_EMAIL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newEmail }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update email');
+
+      const updatedUser = {
+        ...(user || {}),
+        email: newEmail,
+      } as UserData;
+
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      setNewEmail('');
+      setIsChangeEmailDialogOpen(false);
+      toast.success('Email updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update email');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.error('Please enter and confirm your new password');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Missing auth token');
+      }
+
+      const res = await fetch(API_ENDPOINTS.CHANGE_PASSWORD, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ newPassword }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update password');
+
+      setNewPassword('');
+      setConfirmPassword('');
+      setIsChangePasswordDialogOpen(false);
+      toast.success('Password updated successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update password');
     }
   };
 
@@ -194,7 +282,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       className="bg-muted"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Contact support to change your email
+                      Use the settings below to change your email
                     </p>
                   </div>
                 </div>
@@ -222,6 +310,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               </DialogContent>
             </Dialog>
 
+            {/* Change Email */}
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">
                 <Mail className="size-5 text-muted-foreground" />
@@ -232,24 +321,128 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-amber-700" disabled>
-                Change
-              </Button>
+              <Dialog open={isChangeEmailDialogOpen} onOpenChange={(open) => {
+                setIsChangeEmailDialogOpen(open);
+                if (!open) {
+                  setNewEmail('');
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-amber-700">
+                    Change
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Change Email Address</DialogTitle>
+                    <DialogDescription>
+                      Update the email address for your account.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-email">New Email Address</Label>
+                      <Input
+                        id="new-email"
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="Enter new email"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsChangeEmailDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleChangeEmail}
+                      className="bg-amber-600 hover:bg-amber-700"
+                      disabled={!newEmail}
+                    >
+                      Update Email
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
+            {/* Change Password */}
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">
                 <Lock className="size-5 text-muted-foreground" />
                 <div>
                   <p className="text-sm">Password</p>
                   <p className="text-xs text-muted-foreground">
-                    Last changed 3 months ago
+                    Keep your account secure
                   </p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-amber-700" disabled>
-                Change
-              </Button>
+              <Dialog open={isChangePasswordDialogOpen} onOpenChange={(open) => {
+                setIsChangePasswordDialogOpen(open);
+                if (!open) {
+                  setNewPassword('');
+                  setConfirmPassword('');
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-amber-700">
+                    Change
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Change Password</DialogTitle>
+                    <DialogDescription>
+                      Set a new password for your account.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="new-password">New Password</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Enter new password (min 6 characters)"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirm-password">Confirm New Password</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter new password"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsChangePasswordDialogOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleChangePassword}
+                      className="bg-amber-600 hover:bg-amber-700"
+                      disabled={!newPassword || !confirmPassword}
+                    >
+                      Update Password
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </Card>
         </div>

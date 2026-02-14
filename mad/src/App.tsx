@@ -150,6 +150,11 @@ export default function App() {
     setCurrentScreen('chat');
   };
 
+  const handleChatFromSeller = (userId: string) => {
+    setSelectedSellerId(userId);
+    setCurrentScreen('chat');
+  };
+
   const handleBackFromSeller = () => {
     setCurrentScreen('profile');
   };
@@ -203,7 +208,12 @@ export default function App() {
         />
       )}
 
-      {currentScreen === 'sell' && <SellerDashboard onBack={handleBackFromSeller} />}
+      {currentScreen === 'sell' && (
+        <SellerDashboard 
+          onBack={handleBackFromSeller} 
+          onChat={handleChatFromSeller}
+        />
+      )}
 
       {currentScreen === 'profile' && (
         <ProfileScreen

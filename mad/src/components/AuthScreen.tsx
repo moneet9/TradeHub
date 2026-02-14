@@ -11,10 +11,8 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ onLogin }: AuthScreenProps) {
-  const [showOtp, setShowOtp] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [pendingAuthData, setPendingAuthData] = React.useState<any>(null);
 
   // ---------------- API CALLS ----------------
 
@@ -50,6 +48,22 @@ export function AuthScreen({ onLogin }: AuthScreenProps) {
     return data;
   };
 
+  const fetchCurrentUser = async (token: string) => {
+    const res = await fetch(API_ENDPOINTS.GET_ME, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to load user');
+
+    const user = data.user || data;
+    if (user && !user._id && user.id) {
+      user._id = user.id;
+    }
+
+    return user;
+  };
+
   // ---------------- HANDLERS ----------------
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -65,9 +79,14 @@ export function AuthScreen({ onLogin }: AuthScreenProps) {
         password: formData.get('password') as string,
       });
 
-      // Store auth data temporarily until OTP is verified (mock)
-      setPendingAuthData(data);
-      setShowOtp(true);
+      if (!data.token) {
+        throw new Error('Missing auth token');
+      }
+
+      const user = await fetchCurrentUser(data.token);
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(user));
+      onLogin();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -81,77 +100,36 @@ export function AuthScreen({ onLogin }: AuthScreenProps) {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const signupEmail = formData.get('signup-email') as string;
+    const signupPassword = formData.get('signup-password') as string;
 
     try {
-      const data = await registerUser({
+      await registerUser({
         name: formData.get('name') as string,
-        email: formData.get('signup-email') as string,
+        email: signupEmail,
         phone: formData.get('phone') as string,
-        password: formData.get('signup-password') as string,
+        password: signupPassword,
       });
 
-      // Store auth data temporarily until OTP is verified (mock)
-      setPendingAuthData(data);
-      setShowOtp(true);
+      const loginData = await loginUser({
+        emailOrPhone: signupEmail,
+        password: signupPassword,
+      });
+
+      if (!loginData.token) {
+        throw new Error('Missing auth token');
+      }
+
+      const user = await fetchCurrentUser(loginData.token);
+      localStorage.setItem('token', loginData.token);
+      localStorage.setItem('user', JSON.stringify(user));
+      onLogin();
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
-
-  const handleVerifyOtp = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // MOCK OTP → Save token and user data to localStorage
-    if (pendingAuthData) {
-      localStorage.setItem('token', pendingAuthData.token);
-      localStorage.setItem('user', JSON.stringify(pendingAuthData.user));
-    }
-    
-    onLogin();
-  };
-
-  // ---------------- OTP SCREEN ----------------
-
-  if (showOtp) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle>Verify OTP</CardTitle>
-            <CardDescription>
-              Enter the verification code sent to your phone
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="otp">Verification Code</Label>
-                <Input
-                  id="otp"
-                  placeholder="000000"
-                  maxLength={6}
-                  className="text-center text-2xl tracking-widest"
-                />
-              </div>
-              <Button type="submit" className="w-full bg-amber-700 hover:bg-amber-800">
-                Verify & Continue
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => setShowOtp(false)}
-              >
-                Back to Login
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   // ---------------- LOGIN / SIGNUP ----------------
 
@@ -198,6 +176,7 @@ export function AuthScreen({ onLogin }: AuthScreenProps) {
                   <Button type="submit" className="w-full bg-amber-700 hover:bg-amber-800" disabled={loading}>
                     {loading ? 'Please wait...' : 'Login'}
                   </Button>
+
                 </form>
               </CardContent>
             </Card>

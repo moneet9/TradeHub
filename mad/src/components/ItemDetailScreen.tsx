@@ -5,6 +5,7 @@ import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Separator } from './ui/separator';
 import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
 import {
   ArrowLeft,
   Heart,
@@ -20,7 +21,8 @@ import { Listing } from '../lib/mock-data';
 import { formatPrice, formatTimeLeft } from '../lib/utils-data';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Label } from './ui/label';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
+import { API_ENDPOINTS } from '../config/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -40,6 +42,13 @@ export function ItemDetailScreen({ listing, onBack, onChat }: ItemDetailScreenPr
   const [currentImageIndex, setCurrentImageIndex] = React.useState(0);
   const [isPlacingBid, setIsPlacingBid] = React.useState(false);
 
+  // Review states
+  const [sellerRating, setSellerRating] = React.useState<{ totalReviews: number; averageRating: string } | null>(null);
+  const [isReviewDialogOpen, setIsReviewDialogOpen] = React.useState(false);
+  const [reviewRating, setReviewRating] = React.useState(0);
+  const [reviewComment, setReviewComment] = React.useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = React.useState(false);
+
   React.useEffect(() => {
     if (listing.type === 'auction' && listing.auctionEndTime) {
       const interval = setInterval(() => {
@@ -48,6 +57,25 @@ export function ItemDetailScreen({ listing, onBack, onChat }: ItemDetailScreenPr
       return () => clearInterval(interval);
     }
   }, [listing]);
+
+  // Fetch seller rating
+  React.useEffect(() => {
+    const fetchSellerRating = async () => {
+      if (!listing.sellerId) return;
+
+      try {
+        const response = await fetch(API_ENDPOINTS.GET_SELLER_RATING(listing.sellerId));
+        if (response.ok) {
+          const data = await response.json();
+          setSellerRating(data);
+        }
+      } catch (error) {
+        console.error('Error fetching seller rating:', error);
+      }
+    };
+
+    fetchSellerRating();
+  }, [listing.sellerId]);
 
   const handlePlaceBid = async () => {
     if (!bidAmount || bidAmount <= 0) {
@@ -80,9 +108,15 @@ export function ItemDetailScreen({ listing, onBack, onChat }: ItemDetailScreenPr
         return;
       }
 
-      toast.success('Bid placed successfully!', {
-        description: `Your bid of ${formatPrice(bidAmount)} has been placed.`,
-      });
+    toast.success('Bid placed successfully!', {
+  description: `Your bid of ${formatPrice(bidAmount)} has been placed.`,
+  style: {
+    color: 'black',
+  },
+});
+
+
+
 
       // Update bid amount for next bid (using seller's increment)
       const nextBid = bidAmount + (listing.bidIncrement || 1000);
@@ -99,6 +133,65 @@ export function ItemDetailScreen({ listing, onBack, onChat }: ItemDetailScreenPr
     toast.success('Item added to cart!', {
       description: 'Proceed to checkout to complete your purchase.',
     });
+  };
+
+  const handleSubmitReview = async () => {
+    if (reviewRating === 0) {
+      toast.error('Please select a rating');
+      return;
+    }
+
+    if (!reviewComment.trim()) {
+      toast.error('Please write a comment');
+      return;
+    }
+
+    try {
+      setIsSubmittingReview(true);
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        toast.error('Please log in to submit a review');
+        return;
+      }
+
+      const response = await fetch(API_ENDPOINTS.ADD_REVIEW, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          itemId: listing.id,
+          rating: reviewRating,
+          comment: reviewComment,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.message || 'Failed to submit review');
+        return;
+      }
+
+      toast.success('Review submitted successfully!');
+      setIsReviewDialogOpen(false);
+      setReviewRating(0);
+      setReviewComment('');
+
+      // Refresh seller rating
+      const ratingResponse = await fetch(API_ENDPOINTS.GET_SELLER_RATING(listing.sellerId));
+      if (ratingResponse.ok) {
+        const ratingData = await ratingResponse.json();
+        setSellerRating(ratingData);
+      }
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      toast.error('Failed to submit review');
+    } finally {
+      setIsSubmittingReview(false);
+    }
   };
 
   return (
@@ -201,7 +294,7 @@ export function ItemDetailScreen({ listing, onBack, onChat }: ItemDetailScreenPr
                 <div className="flex items-center gap-1 mt-1">
                   <Star className="size-3 fill-amber-500 text-amber-500" />
                   <span className="text-sm">
-                    {listing.seller.rating} ({listing.seller.reviewCount} reviews)
+                    {sellerRating ? `${sellerRating.averageRating} (${sellerRating.totalReviews} reviews)` : 'No reviews yet'}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -214,6 +307,66 @@ export function ItemDetailScreen({ listing, onBack, onChat }: ItemDetailScreenPr
               Chat
             </Button>
           </div>
+
+          {/* Rate Seller Button */}
+          <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="w-full mt-4">
+                <Star className="size-4 mr-2" />
+                Rate Seller
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Rate {listing.seller.name}</DialogTitle>
+                <DialogDescription>
+                  Share your experience with this seller
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Rating</Label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => setReviewRating(star)}
+                        className="focus:outline-none"
+                      >
+                        <Star
+                          className={`size-8 ${
+                            star <= reviewRating
+                              ? 'fill-amber-500 text-amber-500'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Comment</Label>
+                  <Textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Tell us about your experience with this seller..."
+                    rows={4}
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-muted-foreground text-right">
+                    {reviewComment.length}/500
+                  </p>
+                </div>
+                <Button
+                  className="w-full bg-amber-700 hover:bg-amber-800"
+                  onClick={handleSubmitReview}
+                  disabled={isSubmittingReview || reviewRating === 0 || !reviewComment.trim()}
+                >
+                  {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Separator />
